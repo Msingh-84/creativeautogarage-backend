@@ -1,76 +1,73 @@
-
-require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
-const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 const path = require('path');
+const cors = require('cors');
+const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
 
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-}).then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// ✅ HARDCODED Mongo URI — DO NOT use env
+const MONGO_URI = 'mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority&appName=Cluster0';
 
-const bookingSchema = new mongoose.Schema({
-    name: String,
-    email: String,
-    phone: String,
-    service: String,
-    vehicle: String,
-    notes: String,
-    photoPath: String
-});
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-const Booking = mongoose.model('Booking', bookingSchema);
+const Booking = mongoose.model('Booking', new mongoose.Schema({
+  fullName: String,
+  email: String,
+  service: String,
+  vehicleInfo: String,
+  preferredDate: String,
+  notes: String,
+  imagePath: String
+}));
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+  destination: './uploads/',
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage }).single('vehicleImage');
+
+app.post('/submit-booking', (req, res) => {
+  upload(req, res, async function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: 'Upload error: ' + err.message });
+    } else if (err) {
+      return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+
+    const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
+    const imagePath = req.file ? req.file.path : '';
+
+    try {
+      const newBooking = new Booking({
+        fullName,
+        email,
+        service,
+        vehicleInfo,
+        preferredDate,
+        notes,
+        imagePath
+      });
+
+      await newBooking.save();
+      res.json({ success: true, message: 'Booking submitted!' });
+    } catch (error) {
+      res.status(500).json({ error: 'DB error: ' + error.message });
+    }
+  });
 });
 
-const upload = multer({ storage });
-
-app.post('/submit-booking', upload.single('vehiclePhoto'), async (req, res) => {
-    const { name, email, phone, service, vehicle, notes } = req.body;
-    const photoPath = req.file ? req.file.path : "";
-
-    const booking = new Booking({ name, email, phone, service, vehicle, notes, photoPath });
-    await booking.save();
-
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS
-        }
-    });
-
-    await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: process.env.EMAIL_RECEIVER,
-        subject: 'New Booking Received',
-        text: `Name: ${name}
-Email: ${email}
-Phone: ${phone}
-Service: ${service}
-Vehicle: ${vehicle}
-Notes: ${notes}`
-    });
-
-    res.status(200).send("Booking submitted successfully!");
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
-        
+const PORT = 10000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
