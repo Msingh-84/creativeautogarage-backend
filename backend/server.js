@@ -1,24 +1,25 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
+const mongoose = require('mongoose');
 const path = require('path');
 const cors = require('cors');
+const fs = require('fs');
 
-// Init app
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
 
-// Connect to MongoDB
+// ✅ MongoDB setup (hardcoded URI)
 mongoose.connect('mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority&appName=Cluster0', {
   useNewUrlParser: true,
   useUnifiedTopology: true
-}).then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Schema
+// ✅ Define schema
 const Booking = mongoose.model('Booking', new mongoose.Schema({
   fullName: String,
   email: String,
@@ -29,51 +30,46 @@ const Booking = mongoose.model('Booking', new mongoose.Schema({
   imagePath: String
 }));
 
-// Multer setup (to memory for now)
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-// Nodemailer setup (hardcoded dummy — won't send without correct login)
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: 'your_email@gmail.com',
-    pass: 'your_password'
+// ✅ Multer setup for file upload
+const storage = multer.diskStorage({
+  destination: './uploads/',
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
   }
 });
+const upload = multer({ storage }).single('vehicleImage'); // field must match HTML form
 
-// POST route
-app.post('/submit-booking', upload.single('vehicleImage'), async (req, res) => {
-  try {
+// ✅ POST route
+app.post('/submit-booking', (req, res) => {
+  upload(req, res, async function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: 'Upload error: ' + err.message });
+    } else if (err) {
+      return res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+
     const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
-    const imagePath = req.file ? req.file.originalname : '';
+    const imagePath = req.file ? req.file.path : '';
 
-    const booking = new Booking({
-      fullName,
-      email,
-      service,
-      vehicleInfo,
-      preferredDate,
-      notes,
-      imagePath
-    });
-    await booking.save();
+    try {
+      const newBooking = new Booking({
+        fullName,
+        email,
+        service,
+        vehicleInfo,
+        preferredDate,
+        notes,
+        imagePath
+      });
 
-    // optional email
-    await transporter.sendMail({
-      from: 'your_email@gmail.com',
-      to: 'your_email@gmail.com',
-      subject: 'New Booking',
-      text: `Booking details:\n${JSON.stringify(req.body, null, 2)}`
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Error submitting booking:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
+      await newBooking.save();
+      res.json({ success: true, message: 'Booking submitted!' });
+    } catch (error) {
+      res.status(500).json({ error: 'DB error: ' + error.message });
+    }
+  });
 });
 
-// Run server
+// ✅ Start server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
