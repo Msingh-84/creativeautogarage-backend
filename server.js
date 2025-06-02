@@ -77,6 +77,18 @@ app.get('/bookings', async (req, res) => {
   }
 });
 
+// Admin login route
+app.post('/admin-login', (req, res) => {
+  const { username, password } = req.body;
+
+  // Hardcoded admin credentials
+  if (username === 'admin1' && password === '123456') {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+});
+
 
 const PORT = 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
