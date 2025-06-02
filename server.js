@@ -1,25 +1,13 @@
+
 const express = require('express');
-const multer = require('multer');
 const mongoose = require('mongoose');
-const path = require('path');
+const multer = require('multer');
+const nodemailer = require('nodemailer');
 const cors = require('cors');
-const fs = require('fs');
-
+const path = require('path');
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads'));
 
-// ✅ HARDCODED Mongo URI — DO NOT use env
-const MONGO_URI = 'mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority&appName=Cluster0';
-
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB connected'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+mongoose.connect('mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority');
 
 const Booking = mongoose.model('Booking', new mongoose.Schema({
   fullName: String,
@@ -28,67 +16,72 @@ const Booking = mongoose.model('Booking', new mongoose.Schema({
   vehicleInfo: String,
   preferredDate: String,
   notes: String,
-  imagePath: String
+  imagePath: String,
+  status: { type: String, default: 'pending' }
 }));
+
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
 
 const storage = multer.diskStorage({
   destination: './uploads/',
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage }).single('vehicleImage');
 
-app.post('/submit-booking', (req, res) => {
-  upload(req, res, async function (err) {
-    if (err instanceof multer.MulterError) {
-      return res.status(400).json({ error: 'Upload error: ' + err.message });
-    } else if (err) {
-      return res.status(500).json({ error: 'Server error: ' + err.message });
-    }
-
-    const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
-    const imagePath = req.file ? req.file.path.replace(/\\/g, "/") : '';
-
-    try {
-      const newBooking = new Booking({
-        fullName,
-        email,
-        service,
-        vehicleInfo,
-        preferredDate,
-        notes,
-        imagePath
-      });
-
-      await newBooking.save();
-      res.json({ success: true, message: 'Booking submitted!' });
-    } catch (error) {
-      res.status(500).json({ error: 'DB error: ' + error.message });
-    }
-  });
-});
-app.get('/bookings', async (req, res) => {
-  try {
-    const bookings = await Booking.find().sort({ _id: -1 }); // newest first
-    res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch bookings' });
+// Email sender setup
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'youremail@gmail.com',
+    pass: 'yourpassword'
   }
 });
 
-// Admin login route
+function sendMail(to, subject, html) {
+  return transporter.sendMail({ from: 'Creative Auto Garage <youremail@gmail.com>', to, subject, html });
+}
+
+// Booking form route
+app.post('/submit-booking', (req, res) => {
+  upload(req, res, async function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
+    const imagePath = req.file ? req.file.path : '';
+    const newBooking = new Booking({ fullName, email, service, vehicleInfo, preferredDate, notes, imagePath });
+    await newBooking.save();
+
+    await sendMail(email, 'Appointment Request Received', `<p>Hi ${fullName}, your request for ${service} on ${preferredDate} has been received. We'll confirm soon.</p>`);
+    res.json({ success: true, message: "Booking submitted!" });
+  });
+});
+
+app.get('/bookings', async (req, res) => {
+  const bookings = await Booking.find();
+  res.json(bookings);
+});
+
+app.post('/bookings/:id/approved', async (req, res) => {
+  const booking = await Booking.findByIdAndUpdate(req.params.id, { status: 'approved' }, { new: true });
+  await sendMail(booking.email, 'Appointment Confirmed', `<p>Hi ${booking.fullName}, your appointment for ${booking.service} on ${booking.preferredDate} has been confirmed.</p>`);
+  res.json({ message: 'Booking approved and email sent.' });
+});
+
+app.post('/bookings/:id/denied', async (req, res) => {
+  const booking = await Booking.findByIdAndUpdate(req.params.id, { status: 'denied' }, { new: true });
+  res.json({ message: 'Booking denied.' });
+});
+
 app.post('/admin-login', (req, res) => {
   const { username, password } = req.body;
-
-  // Hardcoded admin credentials
   if (username === 'admin1' && password === '123456') {
     res.json({ success: true });
   } else {
-    res.status(401).json({ success: false, message: 'Invalid credentials' });
+    res.json({ success: false });
   }
 });
 
-
-const PORT = 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(10000, () => console.log('Server running on port 10000'));
