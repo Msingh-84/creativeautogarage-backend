@@ -84,4 +84,24 @@ app.post('/admin-login', (req, res) => {
   }
 });
 
+// In your Express app (e.g., server.js or app.js)
+app.post('/contact', async (req, res) => {
+  const { name, email, message } = req.body;
+
+  // You can:
+  // - Save the message to the database
+  // - Send an email notification
+  // - Send a confirmation email to the user
+
+  try {
+    // For now, just log and respond (you can improve later)
+    console.log(`New contact form: ${name}, ${email}, ${message}`);
+    res.status(200).json({ success: true, message: "Message received." });
+  } catch (err) {
+    console.error("Error handling contact form:", err);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+
 app.listen(10000, () => console.log('Server running on port 10000'));
