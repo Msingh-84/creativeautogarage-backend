@@ -48,7 +48,7 @@ app.post('/submit-booking', (req, res) => {
     }
 
     const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
-    const imagePath = req.file ? req.file.path : '';
+    const imagePath = req.file ? req.file.path.replace(/\\/g, "/") : '';
 
     try {
       const newBooking = new Booking({
