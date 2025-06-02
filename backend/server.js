@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 🛠️ Hardcoded connection string (test only)
-const mongoURI = 'mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority&appName=Cluster0';
+const mongoURI = 'mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority';
 
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,
