@@ -68,6 +68,15 @@ app.post('/submit-booking', (req, res) => {
     }
   });
 });
+app.get('/bookings', async (req, res) => {
+  try {
+    const bookings = await Booking.find().sort({ _id: -1 }); // newest first
+    res.json(bookings);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch bookings' });
+  }
+});
+
 
 const PORT = 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
