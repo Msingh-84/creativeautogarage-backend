@@ -1,79 +1,76 @@
-// backend/server.js
+
+require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
-const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
 const path = require('path');
-const cors = require('cors');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Setup MongoDB
-mongoose.connect('mongodb://localhost:27017/autoGarage', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+}).then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+const bookingSchema = new mongoose.Schema({
+    name: String,
+    email: String,
+    phone: String,
+    service: String,
+    vehicle: String,
+    notes: String,
+    photoPath: String
 });
 
-const Booking = mongoose.model('Booking', new mongoose.Schema({
-  fullName: String,
-  email: String,
-  service: String,
-  vehicleInfo: String,
-  preferredDate: String,
-  notes: String,
-  imagePath: String
-}));
+const Booking = mongoose.model('Booking', bookingSchema);
 
-// Setup Multer
 const storage = multer.diskStorage({
-  destination: './uploads/',
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: storage });
-
-// Setup Nodemailer
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // e.g., Gmail
-  auth: {
-    user: 'your_email@gmail.com',
-    pass: 'your_email_password'
-  }
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 
-// Handle POST request
-app.post('/submit-booking', upload.single('vehicleImage'), async (req, res) => {
-  const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
-  const imagePath = req.file ? req.file.path : '';
+const upload = multer({ storage });
 
-  // Save to DB
-  const newBooking = new Booking({
-    fullName,
-    email,
-    service,
-    vehicleInfo,
-    preferredDate,
-    notes,
-    imagePath
-  });
-  await newBooking.save();
+app.post('/submit-booking', upload.single('vehiclePhoto'), async (req, res) => {
+    const { name, email, phone, service, vehicle, notes } = req.body;
+    const photoPath = req.file ? req.file.path : "";
 
-  // Send email
-  const mailOptions = {
-    from: 'your_email@gmail.com',
-    to: 'your_email@gmail.com',
-    subject: 'New Booking Received',
-    text: `Name: ${fullName}\nEmail: ${email}\nService: ${service}\nVehicle Info: ${vehicleInfo}\nDate: ${preferredDate}\nNotes: ${notes}`,
-    attachments: req.file ? [{ path: imagePath }] : []
-  };
-  await transporter.sendMail(mailOptions);
+    const booking = new Booking({ name, email, phone, service, vehicle, notes, photoPath });
+    await booking.save();
 
-  // Respond with confirmation
-  res.json({ success: true });
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+        }
+    });
+
+    await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: process.env.EMAIL_RECEIVER,
+        subject: 'New Booking Received',
+        text: `Name: ${name}
+Email: ${email}
+Phone: ${phone}
+Service: ${service}
+Vehicle: ${vehicle}
+Notes: ${notes}`
+    });
+
+    res.status(200).send("Booking submitted successfully!");
 });
 
-app.listen(3000, () => console.log('Server started on http://localhost:3000'));
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+        
