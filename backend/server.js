@@ -1,27 +1,24 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const multer = require('multer');
 const nodemailer = require('nodemailer');
-const mongoose = require('mongoose');
 const path = require('path');
 const cors = require('cors');
 
+// Init app
 const app = express();
-const PORT = process.env.PORT || 10000;
-
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 🛠️ Hardcoded connection string (test only)
-const mongoURI = 'mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority';
-
-mongoose.connect(mongoURI, {
+// Connect to MongoDB
+mongoose.connect('mongodb+srv://mpst31:1234@cluster0.cxjrtav.mongodb.net/creativeautogarage?retryWrites=true&w=majority&appName=Cluster0', {
   useNewUrlParser: true,
   useUnifiedTopology: true
-})
-  .then(() => console.log('✅ Connected to MongoDB'))
+}).then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+// Schema
 const Booking = mongoose.model('Booking', new mongoose.Schema({
   fullName: String,
   email: String,
@@ -32,48 +29,51 @@ const Booking = mongoose.model('Booking', new mongoose.Schema({
   imagePath: String
 }));
 
-const storage = multer.diskStorage({
-  destination: './uploads/',
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: storage });
+// Multer setup (to memory for now)
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
-// Nodemailer (use placeholder to avoid errors if you don’t want to use it yet)
+// Nodemailer setup (hardcoded dummy — won't send without correct login)
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'placeholder@gmail.com',
-    pass: 'placeholderpassword'
+    user: 'your_email@gmail.com',
+    pass: 'your_password'
   }
 });
 
+// POST route
 app.post('/submit-booking', upload.single('vehicleImage'), async (req, res) => {
   try {
     const { fullName, email, service, vehicleInfo, preferredDate, notes } = req.body;
-    const imagePath = req.file ? req.file.path : '';
+    const imagePath = req.file ? req.file.originalname : '';
 
-    const newBooking = new Booking({
-      fullName, email, service, vehicleInfo, preferredDate, notes, imagePath
+    const booking = new Booking({
+      fullName,
+      email,
+      service,
+      vehicleInfo,
+      preferredDate,
+      notes,
+      imagePath
     });
-    await newBooking.save();
+    await booking.save();
 
-    const mailOptions = {
-      from: 'placeholder@gmail.com',
-      to: 'placeholder@gmail.com',
-      subject: 'New Booking Received',
-      text: `Name: ${fullName}\nEmail: ${email}\nService: ${service}\nVehicle Info: ${vehicleInfo}\nDate: ${preferredDate}\nNotes: ${notes}`,
-      attachments: req.file ? [{ path: imagePath }] : []
-    };
-
-    await transporter.sendMail(mailOptions);
+    // optional email
+    await transporter.sendMail({
+      from: 'your_email@gmail.com',
+      to: 'your_email@gmail.com',
+      subject: 'New Booking',
+      text: `Booking details:\n${JSON.stringify(req.body, null, 2)}`
+    });
 
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error('Error submitting booking:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+// Run server
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
